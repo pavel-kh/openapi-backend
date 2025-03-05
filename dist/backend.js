@@ -207,6 +207,8 @@ class OpenAPIBackend {
                 }
             }
             this.document.paths = newPaths;
+            // Update the document reference
+            this.document = { ...this.document };
         }
         return this.document;
     }

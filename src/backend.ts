@@ -288,6 +288,8 @@ export class OpenAPIBackend<D extends Document = Document> {
         }
       }
       this.document.paths = newPaths;
+      // Update the document reference
+      this.document = { ...this.document };
     }
     
     return this.document;
