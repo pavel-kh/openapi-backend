@@ -176,12 +176,14 @@ export class OpenAPIRouter<D extends Document = Document> {
     return _.chain(paths)
       .entries()
       .flatMap(([path, pathBaseObject]) => {
+        // Normalize the path by removing trailing slashes
+        const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
         const methods = _.pick(pathBaseObject, ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
         return _.entries(methods).map(([method, operation]) => {
           const op = operation as Operation<D>;
           return {
             ...op,
-            path,
+            path: normalizedPath,
             method,
             // append the path base object's parameters to the operation's parameters
             parameters: [
@@ -256,9 +258,9 @@ export class OpenAPIRouter<D extends Document = Document> {
       path = path.replace(new RegExp(`^${this.apiRoot}/?`), '/');
     }
 
-    // remove trailing slashes from path if ignoreTrailingSlashes = true
-    while (this.ignoreTrailingSlashes && path.length > 1 && path.endsWith('/')) {
-      path = path.substr(0, path.length - 1);
+    // Always remove trailing slashes from path
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.slice(0, -1);
     }
 
     return path;
