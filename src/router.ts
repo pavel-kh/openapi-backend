@@ -120,7 +120,7 @@ export class OpenAPIRouter<D extends Document = Document> {
     const normalizedPath = this.normalizePath(req.path);
 
     // get all operations matching exact path
-    const exactPathMatches = this.getOperations().filter(({ path }) => path === normalizedPath);
+    const exactPathMatches = this.getOperations().filter(({ path }) => this.normalizePath(path) === normalizedPath);
 
     // check if there's one with correct method and return if found
     const exactMatch = exactPathMatches.find(({ method }) => method === req.method);
@@ -130,8 +130,10 @@ export class OpenAPIRouter<D extends Document = Document> {
 
     // check with path templates
     const templatePathMatches = this.getOperations().filter(({ path }) => {
+      // normalize the operation path before creating pattern
+      const normalizedOperationPath = this.normalizePath(path);
       // convert openapi path template to a regex pattern i.e. /{id}/ becomes /[^/]+/
-      const pathPattern = `^${path.replace(/\{.*?\}/g, '[^/]+')}$`;
+      const pathPattern = `^${normalizedOperationPath.replace(/\{.*?\}/g, '[^/]+')}$`;
       return Boolean(normalizedPath.match(new RegExp(pathPattern, 'g')));
     });
 
@@ -147,7 +149,7 @@ export class OpenAPIRouter<D extends Document = Document> {
     // find matching operation
     const match = _.chain(templatePathMatches)
       // order matches by length (specificity)
-      .orderBy((op) => op.path.replace(RegExp(/\{.*?\}/g), '').length, 'desc')
+      .orderBy((op) => this.normalizePath(op.path).replace(RegExp(/\{.*?\}/g), '').length, 'desc')
       // then check if one of the matched operations matches the method
       .find(({ method }) => method === req.method)
       .value();
