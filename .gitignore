@@ -12,12 +12,6 @@
 # include jest config
 !jest.config.js
 !.eslintrc.js
-
-# include dist directory
-!dist/**/*.js
-!dist/**/*.js.map
-!dist/**/*.d.ts
-
 # npm
 node_modules
 npm_debug.log*

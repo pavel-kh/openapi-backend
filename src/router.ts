@@ -254,9 +254,8 @@ export class OpenAPIRouter<D extends Document = Document> {
       path = path.replace(new RegExp(`^${this.apiRoot}/?`), '/');
     }
 
-    // remove trailing slashes from path if ignoreTrailingSlashes = true
-    while (this.ignoreTrailingSlashes && path.length > 1 && path.endsWith('/')) {
-      path = path.substr(0, path.length - 1);
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.slice(0, -1);
     }
 
     return path;
