@@ -276,17 +276,6 @@ export class OpenAPIBackend<D extends Document = Document> {
    */
   public async loadDocument() {
     this.document = (await parseJSONSchema(this.inputDocument)) as D;
-    
-    // Normalize paths by removing trailing slashes
-    if (this.document.paths) {
-      const normalizedPaths: { [key: string]: any } = {};
-      for (const [path, pathObj] of Object.entries(this.document.paths)) {
-        const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
-        normalizedPaths[normalizedPath] = pathObj;
-      }
-      this.document.paths = normalizedPaths;
-    }
-    
     return this.document;
   }
 
