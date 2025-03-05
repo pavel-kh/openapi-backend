@@ -195,6 +195,19 @@ class OpenAPIBackend {
      */
     async loadDocument() {
         this.document = (await (0, refparser_1.parse)(this.inputDocument));
+        // Remove trailing slashes from paths
+        if (this.document.paths) {
+            const newPaths = {};
+            for (const [path, pathItem] of Object.entries(this.document.paths)) {
+                if (path.endsWith('/')) {
+                    newPaths[path.slice(0, -1)] = pathItem;
+                }
+                else {
+                    newPaths[path] = pathItem;
+                }
+            }
+            this.document.paths = newPaths;
+        }
         return this.document;
     }
     /**
