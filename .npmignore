@@ -1,0 +1,36 @@
+# Source files
+src/
+
+# Test files
+__tests__/
+*.test.*
+**/*.test.*
+
+# Config files
+.eslintrc*
+.prettierrc*
+tsconfig.json
+jest.config.js
+
+# Development files
+.github/
+.git/
+.gitignore
+.editorconfig
+.vscode/
+.idea/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Examples
+examples/
+
+# Scripts
+scripts/
+
+# CI/CD
+.github/
+.gitlab-ci.yml 
