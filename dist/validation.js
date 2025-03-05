@@ -1,4 +1,6 @@
 "use strict";
+// library code, any is fine
+/* eslint-disable @typescript-eslint/no-explicit-any */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -39,16 +41,23 @@ var ValidationContext;
     ValidationContext["Response"] = "responseValidator";
     ValidationContext["ResponseHeaders"] = "responseHeadersValidator";
 })(ValidationContext || (exports.ValidationContext = ValidationContext = {}));
+/**
+ * Returns a function that validates that a signed number is within the given bit range
+ * @param {number} bits
+ */
 function getBitRangeValidator(bits) {
     const max = Math.pow(2, bits - 1);
     return (value) => value >= -max && value < max;
 }
+// Formats defined by the OAS
 const defaultFormats = {
     int32: {
+        // signed 32 bits
         type: 'number',
         validate: getBitRangeValidator(32),
     },
     int64: {
+        // signed 64 bits (a.k.a long)
         type: 'number',
         validate: getBitRangeValidator(64),
     },
@@ -61,19 +70,38 @@ const defaultFormats = {
         validate: () => true,
     },
     byte: {
+        // base64 encoded characters
         type: 'string',
         validate: /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
     },
     binary: {
+        // any sequence of octets
         type: 'string',
         validate: () => true,
     },
     password: {
+        // A hint to UIs to obscure input.
         type: 'string',
         validate: () => true,
     },
 };
+/**
+ * Class that handles JSON schema validation
+ *
+ * @export
+ * @class OpenAPIValidator
+ */
 class OpenAPIValidator {
+    /**
+     * Creates an instance of OpenAPIValidation
+     *
+     * @param opts - constructor options
+     * @param {Document | string} opts.definition - the OpenAPI definition, file path or Document object
+     * @param {object} opts.ajvOpts - default ajv constructor opts (default: { unknownFormats: 'ignore' })
+     * @param {OpenAPIRouter} opts.router - passed instance of OpenAPIRouter. Will create own child if no passed
+     * @param {boolean} opts.lazyCompileValidators - skips precompiling Ajv validators and compiles only when needed
+     * @memberof OpenAPIRequestValidator
+     */
     constructor(opts) {
         this.definition = opts.definition;
         this.ajvOpts = {
@@ -81,17 +109,25 @@ class OpenAPIValidator {
             ...(opts.ajvOpts || {}),
         };
         this.customizeAjv = opts.customizeAjv;
+        // initalize router
         this.router = opts.router || new router_1.OpenAPIRouter({ definition: this.definition });
+        // initialize validator stores
         this.requestValidators = {};
         this.responseValidators = {};
         this.statusBasedResponseValidators = {};
         this.responseHeadersValidators = {};
+        // precompile validators if not in lazy mode
         if (!opts.lazyCompileValidators) {
             this.preCompileRequestValidators();
             this.preCompileResponseValidators();
             this.preCompileResponseHeaderValidators();
         }
     }
+    /**
+     * Pre-compiles Ajv validators for requests of all api operations
+     *
+     * @memberof OpenAPIValidator
+     */
     preCompileRequestValidators() {
         const operations = this.router.getOperations();
         for (const operation of operations) {
@@ -99,6 +135,11 @@ class OpenAPIValidator {
             this.requestValidators[operationId] = this.buildRequestValidatorsForOperation(operation);
         }
     }
+    /**
+     * Pre-compiles Ajv validators for responses of all api operations
+     *
+     * @memberof OpenAPIValidator
+     */
     preCompileResponseValidators() {
         const operations = this.router.getOperations();
         for (const operation of operations) {
@@ -107,6 +148,11 @@ class OpenAPIValidator {
             this.statusBasedResponseValidators[operationId] = this.buildStatusBasedResponseValidatorForOperation(operation);
         }
     }
+    /**
+     * Pre-compiles Ajv validators for response headers of all api operations
+     *
+     * @memberof OpenAPIValidator
+     */
     preCompileResponseHeaderValidators() {
         const operations = this.router.getOperations();
         for (const operation of operations) {
@@ -114,6 +160,17 @@ class OpenAPIValidator {
             this.responseHeadersValidators[operationId] = this.buildResponseHeadersValidatorForOperation(operation);
         }
     }
+    /**
+     * Validates a request against prebuilt Ajv validators and returns the validation result.
+     *
+     * The method will first match the request to an API operation and use the pre-compiled Ajv validation schema to
+     * validate it.
+     *
+     * @param {Request} req - request to validate
+     * @param {(Operation<D> | string)} operation - operation to validate against
+     * @returns {ValidationResult}
+     * @memberof OpenAPIRequestValidator
+     */
     validateRequest(req, operation) {
         const result = { valid: true };
         result.errors = [];
@@ -126,9 +183,12 @@ class OpenAPIValidator {
         if (!operation || !operation.operationId) {
             throw new Error(`Unknown operation`);
         }
+        // get pre-compiled ajv schemas for operation
         const { operationId } = operation;
         const validators = this.getRequestValidatorsForOperation(operationId) || [];
+        // build a parameter object to validate
         const { params, query, headers, cookies, requestBody } = this.router.parseRequest(req, operation);
+        // convert singular query parameters to arrays if specified as array in operation parametes
         if (query) {
             for (const [name, value] of _.entries(query)) {
                 if (typeof value === 'string') {
@@ -152,6 +212,7 @@ class OpenAPIValidator {
         if (typeof req.body !== 'object' && req.body !== undefined) {
             const payloadFormats = _.keys(_.get(operation, 'requestBody.content', {}));
             if (payloadFormats.length === 1 && payloadFormats[0] === 'application/json') {
+                // check that JSON isn't malformed when the only payload format is JSON
                 try {
                     JSON.parse(`${req.body}`);
                 }
@@ -169,8 +230,10 @@ class OpenAPIValidator {
             }
         }
         if (typeof requestBody === 'object' || headers['content-type'] === 'application/json') {
+            // include request body in validation if an object is provided
             parameters.requestBody = requestBody;
         }
+        // validate parameters against each pre-compiled schema
         for (const validate of validators) {
             validate(parameters);
             if (validate.errors) {
@@ -178,13 +241,24 @@ class OpenAPIValidator {
             }
         }
         if (_.isEmpty(result.errors)) {
+            // set empty errors array to null so we can check for result.errors truthiness
             result.errors = null;
         }
         else {
+            // there were errors, set valid to false
             result.valid = false;
         }
         return result;
     }
+    /**
+     * Validates a response against a prebuilt Ajv validator and returns the result
+     *
+     * @param {*} res
+     * @param {(Operation<D> | string)} operation
+     * @package {number} [statusCode]
+     * @returns {ValidationResult}
+     * @memberof OpenAPIRequestValidator
+     */
     validateResponse(res, operation, statusCode) {
         const result = { valid: true };
         result.errors = [];
@@ -195,30 +269,47 @@ class OpenAPIValidator {
         const { operationId } = op;
         let validate = null;
         if (statusCode) {
+            // use specific status code
             const validateMap = this.getStatusBasedResponseValidatorForOperation(operationId);
             if (validateMap) {
                 validate = utils_1.default.findStatusCodeMatch(statusCode, validateMap);
             }
         }
         else {
+            // match against all status codes
             validate = this.getResponseValidatorForOperation(operationId);
         }
         if (validate) {
+            // perform validation against response
             validate(res);
             if (validate.errors) {
                 result.errors.push(...validate.errors);
             }
         }
         else {
+            // maybe we should warn about this? TODO: add option to enable / disable warnings
+            // console.warn(`No validation matched for ${JSON.stringify({ operationId, statusCode })}`);
         }
         if (_.isEmpty(result.errors)) {
+            // set empty errors array to null so we can check for result.errors truthiness
             result.errors = null;
         }
         else {
+            // there were errors, set valid to false
             result.valid = false;
         }
         return result;
     }
+    /**
+     * Validates response headers against a prebuilt Ajv validator and returns the result
+     *
+     * @param {*} headers
+     * @param {(Operation<D> | string)} operation
+     * @param {number} [opts.statusCode]
+     * @param {SetMatchType} [opts.setMatchType] - one of 'any', 'superset', 'subset', 'exact'
+     * @returns {ValidationResult}
+     * @memberof OpenAPIRequestValidator
+     */
     validateResponseHeaders(headers, operation, opts) {
         const result = { valid: true };
         result.errors = [];
@@ -247,7 +338,7 @@ class OpenAPIValidator {
             if (validateForStatus) {
                 const validate = validateForStatus[setMatchType];
                 if (validate) {
-                    headers = _.mapKeys(headers, (_, headerName) => headerName.toLowerCase());
+                    headers = _.mapKeys(headers, (value, headerName) => headerName.toLowerCase());
                     validate({ headers });
                     if (validate.errors) {
                         result.errors.push(...validate.errors);
@@ -256,13 +347,22 @@ class OpenAPIValidator {
             }
         }
         if (_.isEmpty(result.errors)) {
+            // set empty errors array to null so we can check for result.errors truthiness
             result.errors = null;
         }
         else {
+            // there were errors, set valid to false
             result.valid = false;
         }
         return result;
     }
+    /**
+     * Get an array of request validator functions for an operation by operationId
+     *
+     * @param {string} operationId
+     * @returns {*}  {(ValidateFunction[] | null)}
+     * @memberof OpenAPIValidator
+     */
     getRequestValidatorsForOperation(operationId) {
         if (this.requestValidators[operationId] === undefined) {
             const operation = this.router.getOperation(operationId);
@@ -270,15 +370,30 @@ class OpenAPIValidator {
         }
         return this.requestValidators[operationId];
     }
+    /**
+     * Compiles a schema with Ajv instance and handles circular references.
+     *
+     * @param ajv The Ajv instance
+     * @param schema The schema to compile
+     */
     static compileSchema(ajv, schema) {
         const decycledSchema = this.decycle(schema);
         return ajv.compile(decycledSchema);
     }
+    /**
+     * Produces a deep clone which replaces object reference cycles with JSONSchema refs.
+     * This function is based on [cycle.js]{@link https://github.com/douglascrockford/JSON-js/blob/master/cycle.js}, which was referred by
+     * the [MDN]{@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value}.
+     * @param object An object for which to remove cycles
+     */
     static decycle(object) {
-        const objects = new WeakMap();
+        const objects = new WeakMap(); // object to path mappings
         return (function derez(value, path) {
-            let oldPath;
-            let nu;
+            // The derez function recurses through the object, producing the deep copy.
+            let oldPath; // The path of an earlier occurance of value
+            let nu; // The new object or array
+            // typeof null === "object", so go on if this value is really an object but not
+            // one of the weird builtin objects.
             if (typeof value === 'object' &&
                 value !== null &&
                 !(value instanceof Boolean) &&
@@ -286,11 +401,16 @@ class OpenAPIValidator {
                 !(value instanceof Number) &&
                 !(value instanceof RegExp) &&
                 !(value instanceof String)) {
+                // If the value is an object or array, look to see if we have already
+                // encountered it. If so, return a {"$ref":PATH} object. This uses an
+                // ES6 WeakMap.
                 oldPath = objects.get(value);
                 if (oldPath !== undefined) {
                     return { $ref: oldPath };
                 }
+                // Otherwise, accumulate the unique value and its path.
                 objects.set(value, path);
+                // If it is an array, replicate the array.
                 if (Array.isArray(value)) {
                     nu = [];
                     value.forEach((element, i) => {
@@ -298,6 +418,7 @@ class OpenAPIValidator {
                     });
                 }
                 else {
+                    // If it is an object, replicate the object.
                     nu = {};
                     Object.keys(value).forEach((name) => {
                         nu[name] = derez(value[name], path + '/' + name);
@@ -308,11 +429,21 @@ class OpenAPIValidator {
             return value;
         })(object, '#');
     }
+    /**
+     * Builds Ajv request validation functions for an operation and registers them to requestValidators
+     *
+     * @param {Operation<D>} operation
+     * @returns {*}  {(ValidateFunction[] | null)}
+     * @memberof OpenAPIValidator
+     */
     buildRequestValidatorsForOperation(operation) {
         if (!(operation === null || operation === void 0 ? void 0 : operation.operationId)) {
+            // no operationId, don't register a validator
             return null;
         }
+        // validator functions for this operation
         const validators = [];
+        // schema for operation requestBody
         if (operation.requestBody) {
             const requestBody = operation.requestBody;
             const jsonbody = requestBody.content['application/json'];
@@ -327,12 +458,15 @@ class OpenAPIValidator {
                 };
                 requestBodySchema.required = [];
                 if (_.keys(requestBody.content).length === 1) {
+                    // if application/json is the only specified format, it's required
                     requestBodySchema.required.push('requestBody');
                 }
+                // add compiled params schema to schemas for this operation id
                 const requestBodyValidator = this.getAjv(ValidationContext.RequestBody);
                 validators.push(OpenAPIValidator.compileSchema(requestBodyValidator, requestBodySchema));
             }
         }
+        // schema for operation parameters in: path,query,header,cookie
         const paramsSchema = {
             title: 'Request',
             type: 'object',
@@ -365,11 +499,14 @@ class OpenAPIValidator {
             },
             required: [],
         };
+        // params are dereferenced here, no reference objects.
         const { parameters } = operation;
         if (parameters) {
             parameters.map((parameter) => {
                 const param = parameter;
                 const target = paramsSchema.properties[param.in];
+                // Header params are case-insensitive according to https://tools.ietf.org/html/rfc7230#page-22, so they are
+                // normalized to lower case and validated as such.
                 const normalizedParamName = param.in === 'header' ? param.name.toLowerCase() : param.name;
                 if (param.required) {
                     target.required = target.required || [];
@@ -378,6 +515,9 @@ class OpenAPIValidator {
                 }
                 target.properties = target.properties || {};
                 const paramSchema = param.schema;
+                // Assign the target schema's additionalProperties to the param schema's additionalProperties if the param's additionalProperties is set.
+                // This is to support free-form query params where `additionalProperties` is an object.
+                // https://swagger.io/specification/?sbsearch=free%20form
                 if (paramSchema && (paramSchema === null || paramSchema === void 0 ? void 0 : paramSchema.additionalProperties) !== undefined) {
                     target.additionalProperties = paramSchema.additionalProperties;
                 }
@@ -389,10 +529,18 @@ class OpenAPIValidator {
                 }
             });
         }
+        // add compiled params schema to requestValidators for this operation id
         const paramsValidator = this.getAjv(ValidationContext.Params, { coerceTypes: true });
         validators.push(OpenAPIValidator.compileSchema(paramsValidator, paramsSchema));
         return validators;
     }
+    /**
+     * Get response validator function for an operation by operationId
+     *
+     * @param {string} operationId
+     * @returns {*}  {(ValidateFunction | null)}
+     * @memberof OpenAPIValidator
+     */
     getResponseValidatorForOperation(operationId) {
         if (this.responseValidators[operationId] === undefined) {
             const operation = this.router.getOperation(operationId);
@@ -400,11 +548,20 @@ class OpenAPIValidator {
         }
         return this.responseValidators[operationId];
     }
+    /**
+     * Builds an ajv response validator function for an operation and registers it to responseValidators
+     *
+     * @param {Operation<D>} operation
+     * @returns {*}  {(ValidateFunction | null)}
+     * @memberof OpenAPIValidator
+     */
     buildResponseValidatorForOperation(operation) {
         if (!operation || !operation.operationId) {
+            // no operationId, don't register a validator
             return null;
         }
         if (!operation.responses) {
+            // operation has no responses, don't register a validator
             return null;
         }
         const responseSchemas = [];
@@ -416,12 +573,21 @@ class OpenAPIValidator {
             return null;
         });
         if (_.isEmpty(responseSchemas)) {
+            // operation has no response schemas, don't register a validator
             return null;
         }
+        // compile the validator function and register to responseValidators
         const schema = { oneOf: responseSchemas };
         const responseValidator = this.getAjv(ValidationContext.Response);
         return OpenAPIValidator.compileSchema(responseValidator, schema);
     }
+    /**
+     * Get response validator function for an operation by operationId
+     *
+     * @param {string} operationId
+     * @returns {*}  {(StatusBasedResponseValidatorsFunctionMap | null)}
+     * @memberof OpenAPIRequestValidator
+     */
     getStatusBasedResponseValidatorForOperation(operationId) {
         if (this.statusBasedResponseValidators[operationId] === undefined) {
             const operation = this.router.getOperation(operationId);
@@ -429,11 +595,20 @@ class OpenAPIValidator {
         }
         return this.statusBasedResponseValidators[operationId];
     }
+    /**
+     * Builds an ajv response validator function for an operation and registers it to responseHeadersValidators
+     *
+     * @param {Operation<D>} operation
+     * @returns {*}  {(StatusBasedResponseValidatorsFunctionMap | null)}
+     * @memberof OpenAPIValidator
+     */
     buildStatusBasedResponseValidatorForOperation(operation) {
         if (!operation || !operation.operationId) {
+            // no operationId, don't register a validator
             return null;
         }
         if (!operation.responses) {
+            // operation has no responses, don't register a validator
             return null;
         }
         const responseValidators = {};
@@ -457,6 +632,13 @@ class OpenAPIValidator {
         });
         return responseValidators;
     }
+    /**
+     * Get response validator function for an operation by operationId
+     *
+     * @param {string} operationId
+     * @returns {*}  {(ResponseHeadersValidateFunctionMap | null)}
+     * @memberof OpenAPIRequestValidator
+     */
     getResponseHeadersValidatorForOperation(operationId) {
         if (this.responseHeadersValidators[operationId] === undefined) {
             const operation = this.router.getOperation(operationId);
@@ -464,11 +646,20 @@ class OpenAPIValidator {
         }
         return this.responseHeadersValidators[operationId];
     }
+    /**
+     * Builds an ajv response validator function for an operation and returns it
+     *
+     * @param {Operation<D>} operation
+     * @returns {*}  {(ResponseHeadersValidateFunctionMap | null)}
+     * @memberof OpenAPIValidator
+     */
     buildResponseHeadersValidatorForOperation(operation) {
         if (!operation || !operation.operationId) {
+            // no operationId, don't register a validator
             return null;
         }
         if (!operation.responses) {
+            // operation has no responses, don't register a validator
             return null;
         }
         const headerValidators = {};
@@ -536,6 +727,14 @@ class OpenAPIValidator {
         });
         return headerValidators;
     }
+    /**
+     * Get Ajv options
+     *
+     * @param {ValidationContext} validationContext
+     * @param {AjvOpts} [opts={}]
+     * @returns Ajv
+     * @memberof OpenAPIValidator
+     */
     getAjv(validationContext, opts = {}) {
         const ajvOpts = { ...this.ajvOpts, ...opts };
         const ajv = new ajv_1.default(ajvOpts);
