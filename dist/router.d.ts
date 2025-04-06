@@ -28,6 +28,9 @@ export interface Request {
         [key: string]: string | string[];
     } | string;
     body?: AnyRequestBody;
+    params?: {
+        [key: string]: string;
+    };
 }
 export interface ParsedRequest<RequestBody = AnyRequestBody, Params = UnknownParams, Query = UnknownParams, Headers = UnknownParams, Cookies = UnknownParams> {
     method: string;

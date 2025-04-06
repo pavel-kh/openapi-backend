@@ -68,6 +68,7 @@ export interface Options<D extends Document = Document> {
     };
     securityHandlers?: HandlerMap;
     ignoreTrailingSlashes?: boolean;
+    coerceTypes?: boolean;
 }
 /**
  * Main class and the default export of the 'openapi-backend' module
@@ -87,6 +88,7 @@ export declare class OpenAPIBackend<D extends Document = Document> {
     ignoreTrailingSlashes: boolean;
     ajvOpts: AjvOpts;
     customizeAjv: AjvCustomizer | undefined;
+    coerceTypes: boolean;
     handlers: HandlerMap;
     allowedHandlers: string[];
     securityHandlers: HandlerMap;
@@ -103,6 +105,7 @@ export declare class OpenAPIBackend<D extends Document = Document> {
      * @param {boolean} opts.validate - whether to validate requests with Ajv (default: true)
      * @param {boolean} opts.ignoreTrailingSlashes - whether to ignore trailing slashes when routing (default: true)
      * @param {boolean} opts.ajvOpts - default ajv opts to pass to the validator
+     * @param {boolean} opts.coerceTypes - enable coerce typing of request path and query parameters. Requires validate to be enabled. (default: false)
      * @param {{ [operationId: string]: Handler | ErrorHandler }} opts.handlers - Operation handlers to be registered
      * @memberof OpenAPIBackend
      */

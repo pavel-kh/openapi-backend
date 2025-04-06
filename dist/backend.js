@@ -67,11 +67,12 @@ class OpenAPIBackend {
      * @param {boolean} opts.validate - whether to validate requests with Ajv (default: true)
      * @param {boolean} opts.ignoreTrailingSlashes - whether to ignore trailing slashes when routing (default: true)
      * @param {boolean} opts.ajvOpts - default ajv opts to pass to the validator
+     * @param {boolean} opts.coerceTypes - enable coerce typing of request path and query parameters. Requires validate to be enabled. (default: false)
      * @param {{ [operationId: string]: Handler | ErrorHandler }} opts.handlers - Operation handlers to be registered
      * @memberof OpenAPIBackend
      */
     constructor(opts) {
-        var _a, _b;
+        var _a, _b, _c;
         this.allowedHandlers = [
             '404',
             'notFound',
@@ -82,6 +83,7 @@ class OpenAPIBackend {
             '400',
             'validationFail',
             'unauthorizedHandler',
+            'preResponseHandler',
             'postResponseHandler',
         ];
         const optsWithDefaults = {
@@ -92,6 +94,7 @@ class OpenAPIBackend {
             ignoreTrailingSlashes: true,
             handlers: {},
             securityHandlers: {},
+            coerceTypes: false,
             ...opts,
         };
         this.apiRoot = (_a = optsWithDefaults.apiRoot) !== null && _a !== void 0 ? _a : '/';
@@ -104,6 +107,7 @@ class OpenAPIBackend {
         this.securityHandlers = { ...optsWithDefaults.securityHandlers }; // Copy to avoid mutating passed object
         this.ajvOpts = (_b = optsWithDefaults.ajvOpts) !== null && _b !== void 0 ? _b : {};
         this.customizeAjv = optsWithDefaults.customizeAjv;
+        this.coerceTypes = (_c = optsWithDefaults.coerceTypes) !== null && _c !== void 0 ? _c : false;
     }
     /**
      * Initalizes OpenAPIBackend.
@@ -168,7 +172,8 @@ class OpenAPIBackend {
                 ajvOpts: this.ajvOpts,
                 customizeAjv: this.customizeAjv,
                 router: this.router,
-                lazyCompileValidators: Boolean(this.quick), // optimise startup by lazily compiling Ajv validators
+                lazyCompileValidators: Boolean(this.quick),
+                coerceTypes: this.coerceTypes,
             });
         }
         // we are initalized
@@ -332,6 +337,20 @@ class OpenAPIBackend {
                         return validationFailHandler(context, ...handlerArgs);
                     }
                     // if no validation handler is specified, just ignore it and proceed to route handler
+                }
+                // parse request again now with coerced types, if needed
+                if (this.validator.coerceTypes) {
+                    context.request = this.router.parseRequest(context.validation.coerced, context.operation);
+                }
+            }
+            // execute preResponseHandler before route handler if it exists
+            const preResponseHandler = this.handlers['preResponseHandler'];
+            if (preResponseHandler) {
+                // modify context through preResponseHandler
+                const preResponseResult = await preResponseHandler(context, ...handlerArgs);
+                // If preResponseHandler returns a value, use it as the response and skip further processing
+                if (preResponseResult !== undefined) {
+                    return preResponseResult;
                 }
             }
             // get operation handler

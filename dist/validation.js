@@ -100,6 +100,7 @@ class OpenAPIValidator {
      * @param {object} opts.ajvOpts - default ajv constructor opts (default: { unknownFormats: 'ignore' })
      * @param {OpenAPIRouter} opts.router - passed instance of OpenAPIRouter. Will create own child if no passed
      * @param {boolean} opts.lazyCompileValidators - skips precompiling Ajv validators and compiles only when needed
+     * @param {boolean} opts.coerceTypes - coerce types in request query and path parameters
      * @memberof OpenAPIRequestValidator
      */
     constructor(opts) {
@@ -109,6 +110,7 @@ class OpenAPIValidator {
             ...(opts.ajvOpts || {}),
         };
         this.customizeAjv = opts.customizeAjv;
+        this.coerceTypes = opts.coerceTypes || false;
         // initalize router
         this.router = opts.router || new router_1.OpenAPIRouter({ definition: this.definition });
         // initialize validator stores
@@ -172,7 +174,7 @@ class OpenAPIValidator {
      * @memberof OpenAPIRequestValidator
      */
     validateRequest(req, operation) {
-        const result = { valid: true };
+        const result = { valid: true, coerced: { ...req } };
         result.errors = [];
         if (!operation) {
             operation = this.router.matchOperation(req);
@@ -238,6 +240,10 @@ class OpenAPIValidator {
             validate(parameters);
             if (validate.errors) {
                 result.errors.push(...validate.errors);
+            }
+            else if (this.coerceTypes) {
+                result.coerced.query = parameters.query;
+                result.coerced.params = parameters.path;
             }
         }
         if (_.isEmpty(result.errors)) {

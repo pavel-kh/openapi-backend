@@ -9,9 +9,10 @@ type Document = OpenAPIV3_1.Document | OpenAPIV3.Document;
  * @export
  * @interface ValidationStatus
  */
-export interface ValidationResult {
+export interface ValidationResult<T = any> {
     valid: boolean;
     errors?: ErrorObject[] | null;
+    coerced?: T;
 }
 interface ResponseHeadersValidateFunctionMap {
     [statusCode: string]: {
@@ -39,6 +40,7 @@ export declare class OpenAPIValidator<D extends Document = Document> {
     ajvOpts: AjvOpts;
     lazyCompileValidators: boolean;
     customizeAjv: AjvCustomizer | undefined;
+    coerceTypes: boolean;
     requestValidators: {
         [operationId: string]: ValidateFunction[] | null;
     };
@@ -60,6 +62,7 @@ export declare class OpenAPIValidator<D extends Document = Document> {
      * @param {object} opts.ajvOpts - default ajv constructor opts (default: { unknownFormats: 'ignore' })
      * @param {OpenAPIRouter} opts.router - passed instance of OpenAPIRouter. Will create own child if no passed
      * @param {boolean} opts.lazyCompileValidators - skips precompiling Ajv validators and compiles only when needed
+     * @param {boolean} opts.coerceTypes - coerce types in request query and path parameters
      * @memberof OpenAPIRequestValidator
      */
     constructor(opts: {
@@ -68,6 +71,7 @@ export declare class OpenAPIValidator<D extends Document = Document> {
         router?: OpenAPIRouter<D>;
         lazyCompileValidators?: boolean;
         customizeAjv?: AjvCustomizer;
+        coerceTypes?: boolean;
     });
     /**
      * Pre-compiles Ajv validators for requests of all api operations
@@ -98,7 +102,7 @@ export declare class OpenAPIValidator<D extends Document = Document> {
      * @returns {ValidationResult}
      * @memberof OpenAPIRequestValidator
      */
-    validateRequest(req: Request, operation?: Operation<D> | string): ValidationResult;
+    validateRequest(req: Request, operation?: Operation<D> | string): ValidationResult<Request>;
     /**
      * Validates a response against a prebuilt Ajv validator and returns the result
      *
