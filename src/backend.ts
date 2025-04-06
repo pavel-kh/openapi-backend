@@ -48,7 +48,6 @@ export interface Context<
   validation: ValidationResult;
   security: SecurityHandlerResults;
   response: any;
-  error?: any;
 }
 
 /**
