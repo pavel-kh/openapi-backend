@@ -48,6 +48,7 @@ export interface Context<
   validation: ValidationResult;
   security: SecurityHandlerResults;
   response: any;
+  error?: any;
 }
 
 /**
@@ -102,6 +103,7 @@ export interface Options<D extends Document = Document> {
   };
   securityHandlers?: HandlerMap;
   ignoreTrailingSlashes?: boolean;
+  coerceTypes?: boolean;
 }
 
 /**
@@ -125,6 +127,7 @@ export class OpenAPIBackend<D extends Document = Document> {
 
   public ajvOpts: AjvOpts;
   public customizeAjv: AjvCustomizer | undefined;
+  public coerceTypes: boolean;
 
   public handlers: HandlerMap;
   public allowedHandlers = [
@@ -137,6 +140,7 @@ export class OpenAPIBackend<D extends Document = Document> {
     '400',
     'validationFail',
     'unauthorizedHandler',
+    'preResponseHandler',
     'postResponseHandler',
   ];
 
@@ -156,6 +160,7 @@ export class OpenAPIBackend<D extends Document = Document> {
    * @param {boolean} opts.validate - whether to validate requests with Ajv (default: true)
    * @param {boolean} opts.ignoreTrailingSlashes - whether to ignore trailing slashes when routing (default: true)
    * @param {boolean} opts.ajvOpts - default ajv opts to pass to the validator
+   * @param {boolean} opts.coerceTypes - enable coerce typing of request path and query parameters. Requires validate to be enabled. (default: false)
    * @param {{ [operationId: string]: Handler | ErrorHandler }} opts.handlers - Operation handlers to be registered
    * @memberof OpenAPIBackend
    */
@@ -168,6 +173,7 @@ export class OpenAPIBackend<D extends Document = Document> {
       ignoreTrailingSlashes: true,
       handlers: {} as HandlerMap,
       securityHandlers: {} as HandlerMap,
+      coerceTypes: false,
       ...opts,
     };
     this.apiRoot = optsWithDefaults.apiRoot ?? '/';
@@ -176,10 +182,11 @@ export class OpenAPIBackend<D extends Document = Document> {
     this.quick = !!optsWithDefaults.quick;
     this.validate = !!optsWithDefaults.validate;
     this.ignoreTrailingSlashes = !!optsWithDefaults.ignoreTrailingSlashes;
-    this.handlers = { ...optsWithDefaults.handlers  }; // Copy to avoid mutating passed object
+    this.handlers = { ...optsWithDefaults.handlers }; // Copy to avoid mutating passed object
     this.securityHandlers = { ...optsWithDefaults.securityHandlers }; // Copy to avoid mutating passed object
     this.ajvOpts = optsWithDefaults.ajvOpts ?? {};
     this.customizeAjv = optsWithDefaults.customizeAjv;
+    this.coerceTypes = optsWithDefaults.coerceTypes ?? false;
   }
 
   /**
@@ -245,6 +252,7 @@ export class OpenAPIBackend<D extends Document = Document> {
         customizeAjv: this.customizeAjv,
         router: this.router,
         lazyCompileValidators: Boolean(this.quick), // optimise startup by lazily compiling Ajv validators
+        coerceTypes: this.coerceTypes,
       });
     }
 
@@ -433,6 +441,23 @@ export class OpenAPIBackend<D extends Document = Document> {
             return validationFailHandler(context as Context<D>, ...handlerArgs);
           }
           // if no validation handler is specified, just ignore it and proceed to route handler
+        }
+
+        // parse request again now with coerced types, if needed
+        if (this.validator.coerceTypes) {
+          context.request = this.router.parseRequest(context.validation.coerced, context.operation);
+        }
+      }
+
+      // execute preResponseHandler before route handler if it exists
+      const preResponseHandler = this.handlers['preResponseHandler'];
+      if (preResponseHandler) {
+        // modify context through preResponseHandler
+        const preResponseResult = await preResponseHandler(context as Context<D>, ...handlerArgs);
+        
+        // If preResponseHandler returns a value, use it as the response and skip further processing
+        if (preResponseResult !== undefined) {
+          return preResponseResult;
         }
       }
 
